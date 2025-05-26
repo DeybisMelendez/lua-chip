@@ -1,14 +1,20 @@
 local chip8 = {
     memory = {},
     display = {},
+    keypad = { 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0 },
     registers = { 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0 },
     stack = {},
     delayTimer = 0,
     soundTimer = 0,
-    pc = 0x200, -- Program counter starts at 0x200
-    sp = 0,     -- Stack pointer
-    I = 1,      -- Index register
+    pc = 0x200,            -- Program counter starts at 0x200
+    sp = 0,                -- Stack pointer
+    I = 0,                 -- Index register
+    waitingForKey = false, -- Flag to indicate if waiting for a key press
+    waitingRegister = nil, -- Register to store the key pressed
+    mode = "chip8",        -- Modo de emulación
+    debug = false,
 }
 local bit = require 'bit'
 
@@ -20,28 +26,57 @@ function chip8:onLoad()
 
     local data = file:read("*a")
     file:close()
-    -- Cargar el juego en memoria empezando desde 0x200
-    for i = 0, #data - 1 do
-        local byte = string.byte(data, i + 1)
-        self.memory[0x200 + i] = byte
+    for i = 0, 0xFFF do
+        self.memory[i] = 0 -- Inicializar memoria
     end
-    self:tick()
+    -- Cargar el juego en memoria empezando desde 0x200
+    for i = 1, #data do
+        local byte = string.byte(data, i)
+        self.memory[0x1FF + i] = byte
+    end
+    for i = 0, 64 * 32 - 1 do
+        self.display[i] = 0
+    end
+    self.beepSource = self:createBeepSound()
+end
+
+function chip8:createBeepSound()
+    local sampleRate = 44100
+    local duration = 0.1  -- duración del beep en segundos
+    local frequency = 440 -- frecuencia en Hz (La4)
+    local samples = sampleRate * duration
+    local soundData = love.sound.newSoundData(samples, sampleRate, 16, 1)
+
+    for i = 0, samples - 1 do
+        local t = i / sampleRate
+        local value = math.sin(2 * math.pi * frequency * t)
+        soundData:setSample(i, value)
+    end
+
+    return love.audio.newSource(soundData, "static")
 end
 
 function chip8:update(dt)
-    -- Actualizar temporizadores
-    if self.delayTimer > 0 then
-        self.delayTimer = self.delayTimer - dt
-    end
-    if self.soundTimer > 0 then
-        self.soundTimer = self.soundTimer - dt
-        if self.soundTimer == 0 then
-            -- Reproducir sonido aquí
+    -- Acumular tiempo para manejar temporizadores a 60 Hz
+    self.timerAccumulator = (self.timerAccumulator or 0) + dt
+
+    while self.timerAccumulator >= 1 / 60 do
+        if self.delayTimer > 0 then
+            self.delayTimer = self.delayTimer - 1
         end
+        if self.soundTimer > 0 then
+            self.soundTimer = self.soundTimer - 1
+            if not self.beepSource:isPlaying() then
+                self.beepSource:play()
+            end
+        end
+        self.timerAccumulator = self.timerAccumulator - 1 / 60
     end
 
-    -- Simular un ciclo de CPU
-    --self:tick()
+    -- Ejecutar ciclos de CPU (puedes ajustar la cantidad para velocidad adecuada)
+    for i = 1, 10 do
+        self:tick()
+    end
 end
 
 function chip8:draw()
@@ -54,7 +89,9 @@ function chip8:draw()
             else
                 love.graphics.setColor(0, 0, 0) --
             end
-            love.graphics.points(x, y)
+            if self.mode == "chip8" then
+                love.graphics.rectangle("fill", x * 8, y * 8, 8, 8)
+            end
         end
     end
 end
@@ -64,9 +101,89 @@ function chip8:keypressed(key)
         -- Simular un ciclo de CPU al presionar espacio
         self:tick()
     end
+    if key == "0" then
+        self.keypad[0] = 1
+    elseif key == "1" then
+        self.keypad[1] = 1
+    elseif key == "2" then
+        self.keypad[2] = 1
+    elseif key == "3" then
+        self.keypad[3] = 1
+    elseif key == "4" then
+        self.keypad[4] = 1
+    elseif key == "5" then
+        self.keypad[5] = 1
+    elseif key == "6" then
+        self.keypad[6] = 1
+    elseif key == "7" then
+        self.keypad[7] = 1
+    elseif key == "8" then
+        self.keypad[8] = 1
+    elseif key == "9" then
+        self.keypad[9] = 1
+    elseif key == "a" then
+        self.keypad[10] = 1
+    elseif key == "b" then
+        self.keypad[11] = 1
+    elseif key == "c" then
+        self.keypad[12] = 1
+    elseif key == "d" then
+        self.keypad[13] = 1
+    elseif key == "e" then
+        self.keypad[14] = 1
+    elseif key == "f" then
+        self.keypad[15] = 1
+    end
+end
+
+function chip8:keyreleased(key)
+    if key == "0" then
+        self.keypad[0] = 0
+    elseif key == "1" then
+        self.keypad[1] = 0
+    elseif key == "2" then
+        self.keypad[2] = 0
+    elseif key == "3" then
+        self.keypad[3] = 0
+    elseif key == "4" then
+        self.keypad[4] = 0
+    elseif key == "5" then
+        self.keypad[5] = 0
+    elseif key == "6" then
+        self.keypad[6] = 0
+    elseif key == "7" then
+        self.keypad[7] = 0
+    elseif key == "8" then
+        self.keypad[8] = 0
+    elseif key == "9" then
+        self.keypad[9] = 0
+    elseif key == "a" then
+        self.keypad[10] = 0
+    elseif key == "b" then
+        self.keypad[11] = 0
+    elseif key == "c" then
+        self.keypad[12] = 0
+    elseif key == "d" then
+        self.keypad[13] = 0
+    elseif key == "e" then
+        self.keypad[14] = 0
+    elseif key == "f" then
+        self.keypad[15] = 0
+    end
 end
 
 function chip8:tick()
+    if self.waitingForKey then
+        for i = 0, 15 do
+            if self.keypad[i] == 1 then
+                self.registers[self.waitingRegister] = i
+                self.waitingForKey = false
+                self.waitingRegister = nil
+                break
+            end
+        end
+        return -- No ejecutar más instrucciones hasta que se presione una tecla
+    end
     -- Simular un ciclo de CPU
     local opcode = bit.bor(
         bit.lshift(self.memory[self.pc], 8),
@@ -74,8 +191,15 @@ function chip8:tick()
     )
     self.pc = self.pc + 2 -- Incrementar el contador de programa
     self:executeOpcode(opcode)
-    local firstNibble = bit.rshift(opcode, 12)
-    print(string.format("Opcode: 0x%04X, FirstNiblle: 0x%02X", opcode, firstNibble))
+    if self.debug then
+        print(string.format("PC: 0x%04X, Opcode: 0x%04X, ", self.pc, opcode))
+        print("Registers: " .. table.concat(self.registers, ", "))
+        print("Stack: " .. table.concat(self.stack, ", "))
+        print("I: " .. string.format("0x%04X", self.I))
+        print("Delay Timer: " .. self.delayTimer)
+        print("Sound Timer: " .. self.soundTimer)
+        print("--------------------")
+    end
 end
 
 function chip8:executeOpcode(opcode)
@@ -86,15 +210,11 @@ function chip8:executeOpcode(opcode)
         end
     elseif opcode == 0x00EE then -- RET
         --  Return from a subroutine.
-        if self.sp > 0 then
-            self.sp = self.sp - 1
-            self.pc = self.stack[self.sp]
-        end
+        self.sp = self.sp - 1
+        self.pc = self.stack[self.sp]
     elseif opcode >= 0x1000 and opcode < 0x2000 then -- 1NNN
         --  Jump to location nnn.
         local address = bit.band(opcode, 0x0FFF)
-        self.stack[self.sp] = self.pc
-        self.sp = self.sp + 1
         self.pc = address
     elseif opcode >= 0x2000 and opcode < 0x3000 then -- 2NNN
         -- Call subroutine at nnn.
@@ -132,7 +252,7 @@ function chip8:executeOpcode(opcode)
         -- Set Vx = Vx + KK
         local x = bit.band(bit.rshift(opcode, 8), 0x0F)
         local kk = bit.band(opcode, 0x00FF)
-        self.registers[x] = bit.band(self.registers[x] + kk, 0xFF)
+        self.registers[x] = (self.registers[x] + kk) % 256
     elseif opcode >= 0x8000 and opcode < 0x9000 then -- 8XY0
         if bit.band(opcode, 0x000F) == 0 then
             -- Set Vx = Vy
@@ -168,9 +288,9 @@ function chip8:executeOpcode(opcode)
             self.registers[0xF] = self.registers[x] > self.registers[y] and 1 or 0
             self.registers[x] = bit.band(self.registers[x] - self.registers[y], 0xFF)
         elseif bit.band(opcode, 0x000F) == 6 then
-            -- Shift Vx right by 1, set VF = least significant bit of Vx before shift
+            -- Set VF = least significant bit of Vx, then Vx = Vx >> 1
             local x = bit.band(bit.rshift(opcode, 8), 0x0F)
-            self.registers[0xF] = bit.band(self.registers[x], 0x01)
+            self.registers[0xF] = bit.band(self.registers[x], 0x1)
             self.registers[x] = bit.rshift(self.registers[x], 1)
         elseif bit.band(opcode, 0x000F) == 7 then
             -- Set Vx = Vy - Vx, set VF = NOT borrow
@@ -179,10 +299,10 @@ function chip8:executeOpcode(opcode)
             self.registers[0xF] = self.registers[y] > self.registers[x] and 1 or 0
             self.registers[x] = bit.band(self.registers[y] - self.registers[x], 0xFF)
         elseif bit.band(opcode, 0x000F) == 0xE then
-            -- Shift Vx left by 1, set VF = most significant bit of Vx before shift
+            -- Set VF = most significant bit of Vx, then Vx = Vx << 1
             local x = bit.band(bit.rshift(opcode, 8), 0x0F)
             self.registers[0xF] = bit.rshift(self.registers[x], 7)
-            self.registers[x] = bit.lshift(self.registers[x], 1)
+            self.registers[x] = bit.band(bit.lshift(self.registers[x], 1), 0xFF)
         else
             print("Unknown opcode: " .. string.format("0x%04X", opcode))
         end
@@ -200,7 +320,7 @@ function chip8:executeOpcode(opcode)
     elseif opcode >= 0xB000 and opcode < 0xC000 then -- BNNN
         -- Jump to location nnn + V0
         local nnn = bit.band(opcode, 0x0FFF)
-        self.pc = nnn + self.registers[0]
+        self.pc = self.registers[0] + nnn
     elseif opcode >= 0xC000 and opcode < 0xD000 then -- CXNN
         -- Set Vx = random byte AND NN
         local x = bit.band(bit.rshift(opcode, 8), 0x0F)
@@ -222,7 +342,7 @@ function chip8:executeOpcode(opcode)
                     if self.display[py * 64 + px] == 1 then
                         self.registers[0xF] = 1 -- Collision detected
                     end
-                    self.display[py * 64 + px] = bit.bxor(self.display[py * 64 + px], pixel)
+                    self.display[py * 64 + px] = bit.bxor(self.display[py * 64 + px], 1)
                 end
             end
         end
@@ -230,13 +350,13 @@ function chip8:executeOpcode(opcode)
         if bit.band(opcode, 0x00FF) == 0x009E then
             -- Skip next instruction if key with value of Vx is pressed
             local x = bit.band(bit.rshift(opcode, 8), 0x0F)
-            if self.keypad[self.registers[x]] then
+            if self.keypad[self.registers[x]] == 1 then
                 self.pc = self.pc + 2
             end
         elseif bit.band(opcode, 0x00FF) == 0x00A1 then
             -- Skip next instruction if key with value of Vx is not pressed
             local x = bit.band(bit.rshift(opcode, 8), 0x0F)
-            if not self.keypad[self.registers[x]] then
+            if not self.keypad[self.registers[x]] == 1 then
                 self.pc = self.pc + 2
             end
         else
@@ -250,7 +370,8 @@ function chip8:executeOpcode(opcode)
         elseif bit.band(opcode, 0x00FF) == 0x000A then
             -- Wait for a key press, store the value of the key in Vx
             local x = bit.band(bit.rshift(opcode, 8), 0x0F)
-            -- Implement key wait logic here
+            self.waitingForKey = true
+            self.waitingRegister = x
         elseif bit.band(opcode, 0x00FF) == 0x0015 then
             -- Set delay timer = Vx
             local x = bit.band(bit.rshift(opcode, 8), 0x0F)
@@ -264,15 +385,20 @@ function chip8:executeOpcode(opcode)
             local x = bit.band(bit.rshift(opcode, 8), 0x0F)
             self.I = self.I + self.registers[x]
         elseif bit.band(opcode, 0x00FF) == 0x0029 then
-            -- Set I = location of sprite for digit Vx
+            -- Set i to a hex character
             local x = bit.band(bit.rshift(opcode, 8), 0x0F)
-            self.I = self.registers[x] * 5 -- Assuming each sprite is 5 bytes
+            local value = self.registers[x]
+            if value > 0xF then
+                print("Unknown opcode: " .. string.format("0x%04X", opcode))
+            else
+                self.I = value * 5 -- Assuming font data starts at 0x50
+            end
         elseif bit.band(opcode, 0x00FF) == 0x0033 then
-            -- Store BCD representation of Vx in memory locations I, I+1, and I+2
+            -- FX33: Store BCD representation of Vx in memory at I, I+1, and I+2
             local x                 = bit.band(bit.rshift(opcode, 8), 0x0F)
             local value             = self.registers[x]
             self.memory[self.I]     = math.floor(value / 100)
-            self.memory[self.I + 1] = math.floor((value % 100))
+            self.memory[self.I + 1] = math.floor((value % 100) / 10)
             self.memory[self.I + 2] = value % 10
         elseif bit.band(opcode, 0x00FF) == 0x0055 then
             -- Store registers V0 to Vx in memory starting at location I
@@ -292,14 +418,6 @@ function chip8:executeOpcode(opcode)
     else
         print("Unknown opcode: " .. string.format("0x%04X", opcode))
     end
-end
-
-function chip8:clearScreen()
-
-end
-
-function chip8:popStack()
-
 end
 
 return chip8
