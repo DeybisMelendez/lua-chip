@@ -33,9 +33,40 @@ local chip8 = {
         ["v"] = 0xF,
     }
 }
-local bit = require 'bit'
-
 function chip8:onLoad()
+    self:reset()
+    self:loadGame()
+end
+
+function chip8:reset()
+    -- Resetear memoria
+    for i = 0, 0xFFF do
+        self.memory[i] = 0
+    end
+    -- Resetear display
+    for i = 0, 64 * 32 - 1 do
+        self.display[i] = 0
+    end
+    -- Resetear registros
+    for i = 0, 15 do
+        self.registers[i] = 0
+        self.keypad[i] = 0
+    end
+    -- Resetear stack
+    self.stack = {}
+    self.sp = 0
+    self.pc = 0x200
+    self.I = 0
+    self.delayTimer = 0
+    self.soundTimer = 0
+    self.timerAccumulator = 0
+    self.waitingForKey = false
+    self.waitingRegister = nil
+    self.beepSource = self:createBeepSound()
+    for i = 0, 15 do self.keypad[i] = 0 end
+end
+
+function chip8:loadGame()
     local file = io.open(GamePath, "rb")
     if not file then
         error("Could not open file: " .. GamePath)
@@ -43,19 +74,11 @@ function chip8:onLoad()
 
     local data = file:read("*a")
     file:close()
-    for i = 0, 0xFFF do
-        self.memory[i] = 0 -- Inicializar memoria
-    end
     -- Cargar el juego en memoria empezando desde 0x200
     for i = 1, #data do
         local byte = string.byte(data, i)
         self.memory[0x1FF + i] = byte
     end
-    for i = 0, 64 * 32 - 1 do
-        self.display[i] = 0
-    end
-    self.beepSource = self:createBeepSound()
-    for i = 0, 15 do self.keypad[i] = 0 end
 end
 
 function chip8:createBeepSound()
@@ -126,6 +149,9 @@ function chip8:keypressed(key)
             self.pc = self.pc + 2 -- Avanzar después de recibir la tecla
         end
     end
+    if key == "escape" then
+        self:setScene("menu")
+    end
 end
 
 function chip8:keyreleased(key)
@@ -148,8 +174,8 @@ function chip8:tick()
         return -- No ejecutar más instrucciones hasta que se presione una tecla
     end
     -- Simular un ciclo de CPU
-    local opcode = bit.bor(
-        bit.lshift(self.memory[self.pc], 8),
+    local opcode = Bit.bor(
+        Bit.lshift(self.memory[self.pc], 8),
         self.memory[self.pc + 1]
     )
     self.pc = self.pc + 2 -- Incrementar el contador de programa
@@ -177,148 +203,148 @@ function chip8:executeOpcode(opcode)
         self.pc = self.stack[self.sp]
     elseif opcode >= 0x1000 and opcode < 0x2000 then -- 1NNN
         --  Jump to location nnn.
-        local address = bit.band(opcode, 0x0FFF)
+        local address = Bit.band(opcode, 0x0FFF)
         self.pc = address
     elseif opcode >= 0x2000 and opcode < 0x3000 then -- 2NNN
         -- Call subroutine at nnn.
-        local address = bit.band(opcode, 0x0FFF)
+        local address = Bit.band(opcode, 0x0FFF)
         self.stack[self.sp] = self.pc
         self.sp = self.sp + 1
         self.pc = address
     elseif opcode >= 0x3000 and opcode < 0x4000 then -- 3XNN
         -- Skip next instruction if Vx == NN
-        local x = bit.band(bit.rshift(opcode, 8), 0x0F)
-        local nn = bit.band(opcode, 0x00FF)
+        local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
+        local nn = Bit.band(opcode, 0x00FF)
         if self.registers[x] == nn then
             self.pc = self.pc + 2
         end
     elseif opcode >= 0x4000 and opcode < 0x5000 then -- 4XNN
         -- Skip next instruction if Vx != NN
-        local x = bit.band(bit.rshift(opcode, 8), 0x0F)
-        local nn = bit.band(opcode, 0x00FF)
+        local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
+        local nn = Bit.band(opcode, 0x00FF)
         if self.registers[x] ~= nn then
             self.pc = self.pc + 2
         end
     elseif opcode >= 0x5000 and opcode < 0x6000 then -- 5XY0
         -- Skip next instruction if Vx == Vy
-        local x = bit.band(bit.rshift(opcode, 8), 0x0F)
-        local y = bit.band(bit.rshift(opcode, 4), 0x0F)
+        local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
+        local y = Bit.band(Bit.rshift(opcode, 4), 0x0F)
         if self.registers[x] == self.registers[y] then
             self.pc = self.pc + 2
         end
     elseif opcode >= 0x6000 and opcode < 0x7000 then -- 6XNN
         -- Set Vx = KK
-        local x = bit.band(bit.rshift(opcode, 8), 0x0F)
-        local kk = bit.band(opcode, 0x00FF)
+        local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
+        local kk = Bit.band(opcode, 0x00FF)
         self.registers[x] = kk
     elseif opcode >= 0x7000 and opcode < 0x8000 then -- 7XNN
         -- Set Vx = Vx + KK
-        local x = bit.band(bit.rshift(opcode, 8), 0x0F)
-        local kk = bit.band(opcode, 0x00FF)
+        local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
+        local kk = Bit.band(opcode, 0x00FF)
         self.registers[x] = (self.registers[x] + kk) % 256
     elseif opcode >= 0x8000 and opcode < 0x9000 then -- 8XY0
-        if bit.band(opcode, 0x000F) == 0 then
+        if Bit.band(opcode, 0x000F) == 0 then
             -- Set Vx = Vy
-            local x = bit.band(bit.rshift(opcode, 8), 0x0F)
-            local y = bit.band(bit.rshift(opcode, 4), 0x0F)
+            local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
+            local y = Bit.band(Bit.rshift(opcode, 4), 0x0F)
             self.registers[x] = self.registers[y]
-        elseif bit.band(opcode, 0x000F) == 1 then
+        elseif Bit.band(opcode, 0x000F) == 1 then
             -- Set Vx = Vx OR Vy
-            local x = bit.band(bit.rshift(opcode, 8), 0x0F)
-            local y = bit.band(bit.rshift(opcode, 4), 0x0F)
-            self.registers[x] = bit.bor(self.registers[x], self.registers[y])
-        elseif bit.band(opcode, 0x000F) == 2 then
+            local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
+            local y = Bit.band(Bit.rshift(opcode, 4), 0x0F)
+            self.registers[x] = Bit.bor(self.registers[x], self.registers[y])
+        elseif Bit.band(opcode, 0x000F) == 2 then
             -- Set Vx = Vx AND Vy
-            local x = bit.band(bit.rshift(opcode, 8), 0x0F)
-            local y = bit.band(bit.rshift(opcode, 4), 0x0F)
-            self.registers[x] = bit.band(self.registers[x], self.registers[y])
-        elseif bit.band(opcode, 0x000F) == 3 then
+            local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
+            local y = Bit.band(Bit.rshift(opcode, 4), 0x0F)
+            self.registers[x] = Bit.band(self.registers[x], self.registers[y])
+        elseif Bit.band(opcode, 0x000F) == 3 then
             -- Set Vx = Vx XOR Vy
-            local x = bit.band(bit.rshift(opcode, 8), 0x0F)
-            local y = bit.band(bit.rshift(opcode, 4), 0x0F)
-            self.registers[x] = bit.bxor(self.registers[x], self.registers[y])
-        elseif bit.band(opcode, 0x000F) == 4 then
+            local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
+            local y = Bit.band(Bit.rshift(opcode, 4), 0x0F)
+            self.registers[x] = Bit.bxor(self.registers[x], self.registers[y])
+        elseif Bit.band(opcode, 0x000F) == 4 then
             -- Set Vx = Vx + Vy, set VF = carry
-            local x = bit.band(bit.rshift(opcode, 8), 0x0F)
-            local y = bit.band(bit.rshift(opcode, 4), 0x0F)
+            local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
+            local y = Bit.band(Bit.rshift(opcode, 4), 0x0F)
             local sum = self.registers[x] + self.registers[y]
             self.registers[0xF] = sum > 255 and 1 or 0
-            self.registers[x] = bit.band(sum, 0xFF)
-        elseif bit.band(opcode, 0x000F) == 5 then
+            self.registers[x] = Bit.band(sum, 0xFF)
+        elseif Bit.band(opcode, 0x000F) == 5 then
             -- Set Vx = Vx - Vy, set VF = NOT borrow
-            local x = bit.band(bit.rshift(opcode, 8), 0x0F)
-            local y = bit.band(bit.rshift(opcode, 4), 0x0F)
+            local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
+            local y = Bit.band(Bit.rshift(opcode, 4), 0x0F)
             self.registers[0xF] = self.registers[x] > self.registers[y] and 1 or 0
-            self.registers[x] = bit.band(self.registers[x] - self.registers[y], 0xFF)
-        elseif bit.band(opcode, 0x000F) == 6 then
+            self.registers[x] = Bit.band(self.registers[x] - self.registers[y], 0xFF)
+        elseif Bit.band(opcode, 0x000F) == 6 then
             -- Set VF = least significant bit of Vx, then Vx = Vx >> 1
-            local x = bit.band(bit.rshift(opcode, 8), 0x0F)
-            self.registers[0xF] = bit.band(self.registers[x], 0x1)
-            self.registers[x] = bit.rshift(self.registers[x], 1)
-        elseif bit.band(opcode, 0x000F) == 7 then
+            local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
+            self.registers[0xF] = Bit.band(self.registers[x], 0x1)
+            self.registers[x] = Bit.rshift(self.registers[x], 1)
+        elseif Bit.band(opcode, 0x000F) == 7 then
             -- Set Vx = Vy - Vx, set VF = NOT borrow
-            local x = bit.band(bit.rshift(opcode, 8), 0x0F)
-            local y = bit.band(bit.rshift(opcode, 4), 0x0F)
+            local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
+            local y = Bit.band(Bit.rshift(opcode, 4), 0x0F)
             self.registers[0xF] = self.registers[y] > self.registers[x] and 1 or 0
-            self.registers[x] = bit.band(self.registers[y] - self.registers[x], 0xFF)
-        elseif bit.band(opcode, 0x000F) == 0xE then
+            self.registers[x] = Bit.band(self.registers[y] - self.registers[x], 0xFF)
+        elseif Bit.band(opcode, 0x000F) == 0xE then
             -- Set VF = most significant bit of Vx, then Vx = Vx << 1
-            local x = bit.band(bit.rshift(opcode, 8), 0x0F)
-            self.registers[0xF] = bit.rshift(self.registers[x], 7)
-            self.registers[x] = bit.band(bit.lshift(self.registers[x], 1), 0xFF)
+            local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
+            self.registers[0xF] = Bit.rshift(self.registers[x], 7)
+            self.registers[x] = Bit.band(Bit.lshift(self.registers[x], 1), 0xFF)
         else
             print("Unknown opcode: " .. string.format("0x%04X", opcode))
         end
     elseif opcode >= 0x9000 and opcode < 0xA000 then -- 9XY0
         -- Skip next instruction if Vx != Vy
-        local x = bit.band(bit.rshift(opcode, 8), 0x0F)
-        local y = bit.band(bit.rshift(opcode, 4), 0x0F)
+        local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
+        local y = Bit.band(Bit.rshift(opcode, 4), 0x0F)
         if self.registers[x] ~= self.registers[y] then
             self.pc = self.pc + 2
         end
     elseif opcode >= 0xA000 and opcode < 0xB000 then -- ANNN
         -- Set I = nnn
-        local nnn = bit.band(opcode, 0x0FFF)
+        local nnn = Bit.band(opcode, 0x0FFF)
         self.I = nnn
     elseif opcode >= 0xB000 and opcode < 0xC000 then -- BNNN
         -- Jump to location nnn + V0
-        local nnn = bit.band(opcode, 0x0FFF)
+        local nnn = Bit.band(opcode, 0x0FFF)
         self.pc = self.registers[0] + nnn
     elseif opcode >= 0xC000 and opcode < 0xD000 then -- CXNN
         -- Set Vx = random byte AND NN
-        local x = bit.band(bit.rshift(opcode, 8), 0x0F)
-        local nn = bit.band(opcode, 0x00FF)
-        self.registers[x] = bit.band(math.random(0, 255), nn)
+        local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
+        local nn = Bit.band(opcode, 0x00FF)
+        self.registers[x] = Bit.band(math.random(0, 255), nn)
     elseif opcode >= 0xD000 and opcode < 0xE000 then -- DXYN
         -- Draw sprite at coordinate (Vx, Vy) with N bytes of sprite data
-        local x = bit.band(bit.rshift(opcode, 8), 0x0F)
-        local y = bit.band(bit.rshift(opcode, 4), 0x0F)
-        local n = bit.band(opcode, 0x000F)
+        local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
+        local y = Bit.band(Bit.rshift(opcode, 4), 0x0F)
+        local n = Bit.band(opcode, 0x000F)
         self.registers[0xF] = 0 -- Clear VF before drawing
         for i = 0, n - 1 do
             local byte = self.memory[self.I + i]
             for j = 0, 7 do
-                local pixel = bit.band(byte, bit.lshift(1, 7 - j))
+                local pixel = Bit.band(byte, Bit.lshift(1, 7 - j))
                 if pixel ~= 0 then
                     local px = (self.registers[x] + j) % 64
                     local py = (self.registers[y] + i) % 32
                     if self.display[py * 64 + px] == 1 then
                         self.registers[0xF] = 1 -- Collision detected
                     end
-                    self.display[py * 64 + px] = bit.bxor(self.display[py * 64 + px], 1)
+                    self.display[py * 64 + px] = Bit.bxor(self.display[py * 64 + px], 1)
                 end
             end
         end
     elseif opcode >= 0xE000 and opcode < 0xF000 then -- EXXX
-        local x = bit.band(bit.rshift(opcode, 8), 0x0F)
+        local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
         local keyPressed = self.keypad[self.registers[x]] == 1
 
-        if bit.band(opcode, 0x00FF) == 0x009E then
+        if Bit.band(opcode, 0x00FF) == 0x009E then
             -- Skip next instruction if key with value of Vx is pressed
             if keyPressed then
                 self.pc = self.pc + 2
             end
-        elseif bit.band(opcode, 0x00FF) == 0x00A1 then
+        elseif Bit.band(opcode, 0x00FF) == 0x00A1 then
             -- Skip next instruction if key with value of Vx is NOT pressed
             if not keyPressed then
                 self.pc = self.pc + 2
@@ -327,52 +353,52 @@ function chip8:executeOpcode(opcode)
             print("Unknown opcode: " .. string.format("0x%04X", opcode))
         end
     elseif opcode >= 0xF000 and opcode < 0x10000 then -- FXNN
-        if bit.band(opcode, 0x00FF) == 0x0007 then
+        if Bit.band(opcode, 0x00FF) == 0x0007 then
             -- Set Vx = delay timer value
-            local x = bit.band(bit.rshift(opcode, 8), 0x0F)
+            local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
             self.registers[x] = self.delayTimer
-        elseif bit.band(opcode, 0x00FF) == 0x000A then
+        elseif Bit.band(opcode, 0x00FF) == 0x000A then
             -- Wait for a key press, store the value of the key in Vx
-            local x = bit.band(bit.rshift(opcode, 8), 0x0F)
+            local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
             self.waitingForKey = true
             self.waitingRegister = x
-        elseif bit.band(opcode, 0x00FF) == 0x0015 then
+        elseif Bit.band(opcode, 0x00FF) == 0x0015 then
             -- Set delay timer = Vx
-            local x = bit.band(bit.rshift(opcode, 8), 0x0F)
+            local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
             self.delayTimer = self.registers[x]
-        elseif bit.band(opcode, 0x00FF) == 0x0018 then
+        elseif Bit.band(opcode, 0x00FF) == 0x0018 then
             -- Set sound timer = Vx
-            local x = bit.band(bit.rshift(opcode, 8), 0x0F)
+            local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
             self.soundTimer = self.registers[x]
-        elseif bit.band(opcode, 0x00FF) == 0x001E then
+        elseif Bit.band(opcode, 0x00FF) == 0x001E then
             -- Set I = I + Vx
-            local x = bit.band(bit.rshift(opcode, 8), 0x0F)
+            local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
             self.I = self.I + self.registers[x]
-        elseif bit.band(opcode, 0x00FF) == 0x0029 then
+        elseif Bit.band(opcode, 0x00FF) == 0x0029 then
             -- Set i to a hex character
-            local x = bit.band(bit.rshift(opcode, 8), 0x0F)
+            local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
             local value = self.registers[x]
             if value > 0xF then
                 print("Unknown opcode: " .. string.format("0x%04X", opcode))
             else
                 self.I = value * 5 -- Assuming font data starts at 0x50
             end
-        elseif bit.band(opcode, 0x00FF) == 0x0033 then
+        elseif Bit.band(opcode, 0x00FF) == 0x0033 then
             -- FX33: Store BCD representation of Vx in memory at I, I+1, and I+2
-            local x                 = bit.band(bit.rshift(opcode, 8), 0x0F)
+            local x                 = Bit.band(Bit.rshift(opcode, 8), 0x0F)
             local value             = self.registers[x]
             self.memory[self.I]     = math.floor(value / 100)
             self.memory[self.I + 1] = math.floor((value % 100) / 10)
             self.memory[self.I + 2] = value % 10
-        elseif bit.band(opcode, 0x00FF) == 0x0055 then
+        elseif Bit.band(opcode, 0x00FF) == 0x0055 then
             -- Store registers V0 to Vx in memory starting at location I
-            local x = bit.band(bit.rshift(opcode, 8), 0x0F)
+            local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
             for i = 0, x do
                 self.memory[self.I + i] = self.registers[i]
             end
-        elseif bit.band(opcode, 0x00FF) == 0x0065 then
+        elseif Bit.band(opcode, 0x00FF) == 0x0065 then
             -- Read registers V0 to Vx from memory starting at location I
-            local x = bit.band(bit.rshift(opcode, 8), 0x0F)
+            local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
             for i = 0, x do
                 self.registers[i] = self.memory[self.I + i]
             end

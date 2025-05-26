@@ -5,11 +5,15 @@ function scene:__exit()
 end
 
 function scene:__load()
-    if self.state.onLoad then self.state:onLoad() end
+    if self.onLoad then self:onLoad() end
 end
 
 function scene:setScene(s)
     self:__exit()
+    if self.current then
+        package.loaded[self.current] = nil
+        self.current = nil
+    end
     self.state = nil
     collectgarbage("collect")
     self.state = require(s)
@@ -19,9 +23,12 @@ end
 
 function scene:reload()
     self:__exit()
+    if self.current then
+        package.loaded[self.current] = nil
+    end
     self.state = nil
     collectgarbage("collect")
-    self.state = require(self.lib)
+    self.state = require(self.current)
     self:__load()
 end
 

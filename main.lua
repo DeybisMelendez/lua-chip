@@ -1,6 +1,7 @@
 local scene = require("scene")
 
 GamePath = ""
+Bit = require "bit"
 function love.load()
     scene:setScene("menu")
 end
