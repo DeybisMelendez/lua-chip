@@ -22,3 +22,9 @@ function love.keypressed(key)
         scene:keypressed(key)
     end
 end
+
+function love.keyreleased(key)
+    if scene.keyreleased then
+        scene:keyreleased(key)
+    end
+end

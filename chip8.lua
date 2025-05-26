@@ -1,8 +1,7 @@
 local chip8 = {
     memory = {},
     display = {},
-    keypad = { 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0 },
+    keypad = {},
     registers = { 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0 },
     stack = {},
@@ -15,6 +14,24 @@ local chip8 = {
     waitingRegister = nil, -- Register to store the key pressed
     mode = "chip8",        -- Modo de emulación
     debug = false,
+    keymap = {
+        ["1"] = 0x1,
+        ["2"] = 0x2,
+        ["3"] = 0x3,
+        ["4"] = 0xC,
+        ["q"] = 0x4,
+        ["w"] = 0x5,
+        ["e"] = 0x6,
+        ["r"] = 0xD,
+        ["a"] = 0x7,
+        ["s"] = 0x8,
+        ["d"] = 0x9,
+        ["f"] = 0xE,
+        ["z"] = 0xA,
+        ["x"] = 0x0,
+        ["c"] = 0xB,
+        ["v"] = 0xF,
+    }
 }
 local bit = require 'bit'
 
@@ -38,6 +55,7 @@ function chip8:onLoad()
         self.display[i] = 0
     end
     self.beepSource = self:createBeepSound()
+    for i = 0, 15 do self.keypad[i] = 0 end
 end
 
 function chip8:createBeepSound()
@@ -74,7 +92,7 @@ function chip8:update(dt)
     end
 
     -- Ejecutar ciclos de CPU (puedes ajustar la cantidad para velocidad adecuada)
-    for i = 1, 10 do
+    for _ = 1, 10 do
         self:tick()
     end
 end
@@ -97,78 +115,23 @@ function chip8:draw()
 end
 
 function chip8:keypressed(key)
-    if key == "space" then
-        -- Simular un ciclo de CPU al presionar espacio
-        self:tick()
-    end
-    if key == "0" then
-        self.keypad[0] = 1
-    elseif key == "1" then
-        self.keypad[1] = 1
-    elseif key == "2" then
-        self.keypad[2] = 1
-    elseif key == "3" then
-        self.keypad[3] = 1
-    elseif key == "4" then
-        self.keypad[4] = 1
-    elseif key == "5" then
-        self.keypad[5] = 1
-    elseif key == "6" then
-        self.keypad[6] = 1
-    elseif key == "7" then
-        self.keypad[7] = 1
-    elseif key == "8" then
-        self.keypad[8] = 1
-    elseif key == "9" then
-        self.keypad[9] = 1
-    elseif key == "a" then
-        self.keypad[10] = 1
-    elseif key == "b" then
-        self.keypad[11] = 1
-    elseif key == "c" then
-        self.keypad[12] = 1
-    elseif key == "d" then
-        self.keypad[13] = 1
-    elseif key == "e" then
-        self.keypad[14] = 1
-    elseif key == "f" then
-        self.keypad[15] = 1
+    local chip8Key = self.keymap[key]
+    if chip8Key then
+        self.keypad[chip8Key] = 1
+
+        if self.waitingForKey then
+            self.registers[self.waitingRegister] = chip8Key
+            self.waitingForKey = false
+            self.waitingRegister = nil
+            self.pc = self.pc + 2 -- Avanzar después de recibir la tecla
+        end
     end
 end
 
 function chip8:keyreleased(key)
-    if key == "0" then
-        self.keypad[0] = 0
-    elseif key == "1" then
-        self.keypad[1] = 0
-    elseif key == "2" then
-        self.keypad[2] = 0
-    elseif key == "3" then
-        self.keypad[3] = 0
-    elseif key == "4" then
-        self.keypad[4] = 0
-    elseif key == "5" then
-        self.keypad[5] = 0
-    elseif key == "6" then
-        self.keypad[6] = 0
-    elseif key == "7" then
-        self.keypad[7] = 0
-    elseif key == "8" then
-        self.keypad[8] = 0
-    elseif key == "9" then
-        self.keypad[9] = 0
-    elseif key == "a" then
-        self.keypad[10] = 0
-    elseif key == "b" then
-        self.keypad[11] = 0
-    elseif key == "c" then
-        self.keypad[12] = 0
-    elseif key == "d" then
-        self.keypad[13] = 0
-    elseif key == "e" then
-        self.keypad[14] = 0
-    elseif key == "f" then
-        self.keypad[15] = 0
+    local chip8Key = self.keymap[key]
+    if chip8Key then
+        self.keypad[chip8Key] = 0
     end
 end
 
@@ -347,16 +310,17 @@ function chip8:executeOpcode(opcode)
             end
         end
     elseif opcode >= 0xE000 and opcode < 0xF000 then -- EXXX
+        local x = bit.band(bit.rshift(opcode, 8), 0x0F)
+        local keyPressed = self.keypad[self.registers[x]] == 1
+
         if bit.band(opcode, 0x00FF) == 0x009E then
             -- Skip next instruction if key with value of Vx is pressed
-            local x = bit.band(bit.rshift(opcode, 8), 0x0F)
-            if self.keypad[self.registers[x]] == 1 then
+            if keyPressed then
                 self.pc = self.pc + 2
             end
         elseif bit.band(opcode, 0x00FF) == 0x00A1 then
-            -- Skip next instruction if key with value of Vx is not pressed
-            local x = bit.band(bit.rshift(opcode, 8), 0x0F)
-            if not self.keypad[self.registers[x]] == 1 then
+            -- Skip next instruction if key with value of Vx is NOT pressed
+            if not keyPressed then
                 self.pc = self.pc + 2
             end
         else
