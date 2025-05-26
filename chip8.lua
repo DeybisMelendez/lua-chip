@@ -31,7 +31,18 @@ local chip8 = {
         ["x"] = 0x0,
         ["c"] = 0xB,
         ["v"] = 0xF,
-    }
+    },
+    colors = {
+        { bg = { 0, 0, 0 },     color = { 1, 1, 1 } },
+        { bg = { 0, 0, 0 },     color = { 0, 1, 0 } },
+        { bg = { 0, 0, 0 },     color = { 0, 1, 1 } },
+        { bg = { 0, 0, 0 },     color = { 1, 1, 0 } },
+        { bg = { 0.5, 0.2, 1 }, color = { 1, 1, 1 } },
+        { bg = { 1, 1, 1 },     color = { 0, 0, 0 } },
+        { bg = { 0.1, 0.1, 1 }, color = { 0.9, 0.9, 1 } },
+        { bg = { 0, 1, 0 },     color = { 0, 0.2, 0 } },
+    },
+    currentColor = 1
 }
 function chip8:onLoad()
     self:reset()
@@ -121,16 +132,14 @@ function chip8:update(dt)
 end
 
 function chip8:draw()
-    -- Dibujar la pantalla
+    local color = self.colors[self.currentColor]
+    love.graphics.clear(color.bg)
+    love.graphics.setColor(color.color)
+
     for y = 0, 31 do
         for x = 0, 63 do
             local pixel = self.display[y * 64 + x]
             if pixel == 1 then
-                love.graphics.setColor(1, 1, 1) -- Blanco
-            else
-                love.graphics.setColor(0, 0, 0) --
-            end
-            if self.mode == "chip8" then
                 love.graphics.rectangle("fill", x * 8, y * 8, 8, 8)
             end
         end
@@ -151,6 +160,9 @@ function chip8:keypressed(key)
     end
     if key == "escape" then
         self:setScene("menu")
+    end
+    if key == "tab" then
+        chip8.currentColor = chip8.currentColor % #chip8.colors + 1
     end
 end
 
