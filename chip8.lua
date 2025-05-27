@@ -419,25 +419,35 @@ function chip8:executeOpcode(opcode)
             local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
             local y = Bit.band(Bit.rshift(opcode, 4), 0x0F)
             local sum = self.registers[x] + self.registers[y]
-            self.registers[0xF] = sum > 255 and 1 or 0
             self.registers[x] = Bit.band(sum, 0xFF)
+            self.registers[0xF] = sum > 255 and 1 or 0
         elseif Bit.band(opcode, 0x000F) == 5 then
-            -- Set Vx = Vx - Vy, set VF = NOT borrow
+            -- Set Vx = Vx - Vy, set VF = 0 on borrow
             local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
             local y = Bit.band(Bit.rshift(opcode, 4), 0x0F)
-            self.registers[0xF] = self.registers[x] > self.registers[y] and 1 or 0
-            self.registers[x] = Bit.band(self.registers[x] - self.registers[y], 0xFF)
+            if self.registers[x] >= self.registers[y] then
+                self.registers[x] = Bit.band(self.registers[x] - self.registers[y], 0xFF)
+                self.registers[0xF] = 1
+            else
+                self.registers[0xF] = 0
+                self.registers[x] = Bit.band(self.registers[y] - self.registers[x], 0xFF)
+            end
         elseif Bit.band(opcode, 0x000F) == 6 then
             -- Set VF = least significant bit of Vx, then Vx = Vx >> 1
             local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
             self.registers[0xF] = Bit.band(self.registers[x], 0x1)
             self.registers[x] = Bit.rshift(self.registers[x], 1)
         elseif Bit.band(opcode, 0x000F) == 7 then
-            -- Set Vx = Vy - Vx, set VF = NOT borrow
+            -- Set Vx = Vy - Vx, set VF = 0 on borrow
             local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
             local y = Bit.band(Bit.rshift(opcode, 4), 0x0F)
-            self.registers[0xF] = self.registers[y] > self.registers[x] and 1 or 0
-            self.registers[x] = Bit.band(self.registers[y] - self.registers[x], 0xFF)
+            if self.registers[y] >= self.registers[x] then
+                self.registers[x] = Bit.band(self.registers[y] - self.registers[x], 0xFF)
+                self.registers[0xF] = 1
+            else
+                self.registers[0xF] = 0
+                self.registers[x] = Bit.band(self.registers[x] - self.registers[y], 0xFF)
+            end
         elseif Bit.band(opcode, 0x000F) == 0xE then
             -- Set VF = most significant bit of Vx, then Vx = Vx << 1
             local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
