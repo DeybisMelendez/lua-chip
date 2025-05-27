@@ -14,9 +14,12 @@ local chip8 = {
     },
     quirks = {
         -- Chip 8 quirks
-        shifting = false,
         vfReset = true,
-        jumping = true,
+        memory = true,
+        dispWait = true,
+        clipping = true,
+        shifting = false,
+        jumping = false
     },
     keymap = {
         ["1"] = 0x1,
@@ -206,11 +209,13 @@ function chip8:update(dt)
     if self.delayTimer > 0 then
         self.delayTimer = self.delayTimer - 1
     end
-
+    if self.waitingForKey then
+        return
+    end
     -- Ejecutar ciclos de CPU (puedes ajustar la cantidad para velocidad adecuada)
     if self.mode == self.modes.chip8 then
         -- Chip-8 tiene un ciclo de CPU más lento, por lo que ejecutamos menos ciclos
-        for _ = 1, 10 do
+        for _ = 1, 8 do
             self:tick()
         end
     elseif self.mode == self.modes.superChip then
@@ -251,13 +256,6 @@ function chip8:keypressed(key)
     local chip8Key = self.keymap[key]
     if chip8Key then
         self.keypad[chip8Key] = 1
-
-        if self.waitingForKey then
-            self.registers[self.waitingRegister] = chip8Key
-            self.waitingForKey = false
-            self.waitingRegister = nil
-            self.pc = self.pc + 2 -- Avanzar después de recibir la tecla
-        end
     end
     if key == "escape" then
         self:setScene("menu")
@@ -271,6 +269,11 @@ function chip8:keyreleased(key)
     local chip8Key = self.keymap[key]
     if chip8Key then
         self.keypad[chip8Key] = 0
+        if self.waitingForKey then
+            self.registers[self.waitingRegister] = chip8Key
+            self.waitingForKey = false
+            self.waitingRegister = nil
+        end
     end
 end
 
@@ -356,8 +359,20 @@ function chip8:executeOpcode(opcode)
         self:setScene("menu")
     elseif opcode == 0x00FF then
         self.mode = self.modes.superChip
+        self.quirks.vfReset = true
+        self.quirks.memory = true
+        self.quirks.dispWait = false
+        self.quirks.clipping = false
+        self.quirks.shifting = true
+        self.quirks.jumping = true
     elseif opcode == 0x00FE then
         self.mode = self.modes.chip8
+        self.quirks.vfReset = true
+        self.quirks.memory = true
+        self.quirks.dispWait = true
+        self.quirks.clipping = true
+        self.quirks.shifting = false
+        self.quirks.jumping = false
     elseif opcode >= 0x1000 and opcode < 0x2000 then -- 1NNN
         --  Jump to location nnn.
         local address = Bit.band(opcode, 0x0FFF)
@@ -520,72 +535,105 @@ function chip8:executeOpcode(opcode)
             local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
             local y = Bit.band(Bit.rshift(opcode, 4), 0x0F)
             local n = Bit.band(opcode, 0x000F)
-            self.registers[0xF] = 0 -- Clear VF before drawing
+
+            local vx = self.registers[x] % 64
+            local vy = self.registers[y] % 32
+
+            self.registers[0xF] = 0 -- Clear VF
+
             for i = 0, n - 1 do
                 local byte = self.memory[self.I + i]
                 for j = 0, 7 do
                     local pixel = Bit.band(byte, Bit.lshift(1, 7 - j))
                     if pixel ~= 0 then
-                        local px = (self.registers[x] + j) % 64
-                        local py = (self.registers[y] + i) % 32
-                        if self.display[py * 64 + px] == 1 then
-                            self.registers[0xF] = 1 -- Collision detected
+                        local px = vx + j
+                        local py = vy + i
+
+                        if self.quirks.clipping then
+                            -- Solo dibujamos si está dentro de los límites
+                            if px >= 64 or py >= 32 then
+                                goto continue
+                            end
                         end
-                        self.display[py * 64 + px] = Bit.bxor(self.display[py * 64 + px], 1)
+
+                        px = px % 64
+                        py = py % 32
+
+                        local idx = py * 64 + px
+                        if self.display[idx] == 1 then
+                            self.registers[0xF] = 1
+                        end
+                        self.display[idx] = Bit.bxor(self.display[idx], 1)
+                        ::continue::
                     end
                 end
             end
         elseif self.mode == self.modes.superChip then
-            -- DXYN: SuperChip soporta sprites de 8xN (N=0: 16x16)
             local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
             local y = Bit.band(Bit.rshift(opcode, 4), 0x0F)
             local n = Bit.band(opcode, 0x000F)
-            self.registers[0xF] = 0 -- Clear VF before drawing
+
+            local vx = self.registers[x] % 128
+            local vy = self.registers[y] % 64
+
+            self.registers[0xF] = 0 -- Clear VF
 
             if n == 0 then
                 -- DXY0: Dibuja sprite 16x16 (32 bytes)
                 for i = 0, 15 do
-                    local leftByte  = self.memory[self.I + i * 2]
-                    local rightByte = self.memory[self.I + i * 2 + 1]
-                    for j = 0, 7 do
-                        -- Izquierda (bits 0-7)
-                        local pixel = Bit.band(leftByte, Bit.lshift(1, 7 - j))
+                    local byte1 = self.memory[self.I + i * 2]
+                    local byte2 = self.memory[self.I + i * 2 + 1]
+                    local line = Bit.bor(Bit.lshift(byte1, 8), byte2)
+                    for j = 0, 15 do
+                        local pixel = Bit.band(line, Bit.lshift(1, 15 - j))
                         if pixel ~= 0 then
-                            local px = (self.registers[x] + j) % 128
-                            local py = (self.registers[y] + i) % 64
+                            local px = vx + j
+                            local py = vy + i
+
+                            if self.quirks.clipping then
+                                -- Si clipping está activado, no dibujamos fuera de pantalla
+                                if px >= 128 or py >= 64 then
+                                    goto continue
+                                end
+                            end
+
+                            px = px % 128
+                            py = py % 64
+
                             local idx = py * 128 + px
                             if self.display[idx] == 1 then
                                 self.registers[0xF] = 1
                             end
                             self.display[idx] = Bit.bxor(self.display[idx] or 0, 1)
-                        end
-                        -- Derecha (bits 8-15)
-                        local pixel2 = Bit.band(rightByte, Bit.lshift(1, 7 - j))
-                        if pixel2 ~= 0 then
-                            local px = (self.registers[x] + 8 + j) % 128
-                            local py = (self.registers[y] + i) % 64
-                            local idx = py * 128 + px
-                            if self.display[idx] == 1 then
-                                self.registers[0xF] = 1
-                            end
-                            self.display[idx] = Bit.bxor(self.display[idx] or 0, 1)
+                            ::continue::
                         end
                     end
                 end
             else
-                -- DXYN: Dibuja sprite 8xN (igual que Chip8 pero en pantalla 128x64)
+                -- DXYN: Dibuja sprite 8xN
                 for i = 0, n - 1 do
                     local byte = self.memory[self.I + i]
                     for j = 0, 7 do
                         local pixel = Bit.band(byte, Bit.lshift(1, 7 - j))
                         if pixel ~= 0 then
-                            local px = (self.registers[x] + j) % 128
-                            local py = (self.registers[y] + i) % 64
+                            local px = vx + j
+                            local py = vy + i
+
+                            if self.quirks.clipping then
+                                if px >= 128 or py >= 64 then
+                                    goto continue
+                                end
+                            end
+
+                            px = px % 128
+                            py = py % 64
+
                             local idx = py * 128 + px
                             if self.display[idx] == 1 then
                                 self.registers[0xF] = 1
                             end
                             self.display[idx] = Bit.bxor(self.display[idx] or 0, 1)
+                            ::continue::
                         end
                     end
                 end
@@ -666,11 +714,17 @@ function chip8:executeOpcode(opcode)
             for i = 0, x do
                 self.memory[self.I + i] = self.registers[i]
             end
+            if self.quirks.memory then
+                self.I = self.I + x + 1 -- Increment I by x + 1
+            end
         elseif Bit.band(opcode, 0x00FF) == 0x0065 then
             -- Read registers V0 to Vx from memory starting at location I
             local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
             for i = 0, x do
                 self.registers[i] = self.memory[self.I + i]
+            end
+            if self.quirks.memory then
+                self.I = self.I + x + 1 -- Increment I by x + 1
             end
         elseif Bit.band(opcode, 0x00FF) == 0x0075 and self.mode == self.modes.superChip then
             -- Store registers V0 to Vx in memory starting at location I (SuperChip)
