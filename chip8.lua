@@ -429,14 +429,22 @@ function chip8:executeOpcode(opcode)
                 self.registers[x] = Bit.band(self.registers[x] - self.registers[y], 0xFF)
                 self.registers[0xF] = 1
             else
+                self.registers[x] = Bit.band(self.registers[x] - self.registers[y], 0xFF)
                 self.registers[0xF] = 0
-                self.registers[x] = Bit.band(self.registers[y] - self.registers[x], 0xFF)
             end
         elseif Bit.band(opcode, 0x000F) == 6 then
-            -- Set VF = least significant bit of Vx, then Vx = Vx >> 1
+            -- Set VF = least significant bit of Vx, then Vx = Vx >> 1 or Vx = Vy >> 1
             local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
-            self.registers[0xF] = Bit.band(self.registers[x], 0x1)
-            self.registers[x] = Bit.rshift(self.registers[x], 1)
+            local y = Bit.band(Bit.rshift(opcode, 4), 0x0F)
+            if Quirks.shiftQuirk then
+                local value = self.registers[y]
+                self.registers[x] = Bit.rshift(value, 1)
+                self.registers[0xF] = Bit.band(value, 0x01)
+            else
+                local value = self.registers[x]
+                self.registers[x] = Bit.rshift(value, 1)
+                self.registers[0xF] = Bit.band(value, 0x01)
+            end
         elseif Bit.band(opcode, 0x000F) == 7 then
             -- Set Vx = Vy - Vx, set VF = 0 on borrow
             local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
@@ -445,14 +453,22 @@ function chip8:executeOpcode(opcode)
                 self.registers[x] = Bit.band(self.registers[y] - self.registers[x], 0xFF)
                 self.registers[0xF] = 1
             else
+                self.registers[x] = Bit.band(self.registers[y] - self.registers[x], 0xFF)
                 self.registers[0xF] = 0
-                self.registers[x] = Bit.band(self.registers[x] - self.registers[y], 0xFF)
             end
         elseif Bit.band(opcode, 0x000F) == 0xE then
             -- Set VF = most significant bit of Vx, then Vx = Vx << 1
             local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
-            self.registers[0xF] = Bit.rshift(self.registers[x], 7)
-            self.registers[x] = Bit.band(Bit.lshift(self.registers[x], 1), 0xFF)
+            if Quirks.shiftQuirk then
+                local y = Bit.band(Bit.rshift(opcode, 4), 0x0F)
+                local value = self.registers[y]
+                self.registers[x] = Bit.band(Bit.lshift(value, 1), 0xFF)
+                self.registers[0xF] = Bit.band(Bit.rshift(value, 7), 0x1)
+            else
+                local value = self.registers[x]
+                self.registers[x] = Bit.band(Bit.lshift(value, 1), 0xFF)
+                self.registers[0xF] = Bit.band(Bit.rshift(value, 7), 0x1)
+            end
         else
             print("Unknown opcode: " .. string.format("0x%04X", opcode))
         end

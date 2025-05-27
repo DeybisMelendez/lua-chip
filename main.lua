@@ -1,6 +1,10 @@
 local scene = require("scene")
 
 GamePath = ""
+Quirks = {
+    shiftQuirk = false, -- Si es true, se aplica el quirk de shift
+}
+
 Bit = require "bit"
 function love.load()
     scene:setScene("menu")
