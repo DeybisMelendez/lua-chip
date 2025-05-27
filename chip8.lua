@@ -188,9 +188,6 @@ function chip8:update(dt)
     self.timerAccumulator = (self.timerAccumulator or 0) + dt
 
     while self.timerAccumulator >= self.tickRate do
-        if self.delayTimer > 0 then
-            self.delayTimer = self.delayTimer - 1
-        end
         if self.soundTimer > 0 then
             self.soundTimer = self.soundTimer - 1
             if not self.beepSource:isPlaying() then
@@ -198,6 +195,10 @@ function chip8:update(dt)
             end
         end
         self.timerAccumulator = self.timerAccumulator - self.tickRate
+    end
+    -- Actualizar temporizadores
+    if self.delayTimer > 0 then
+        self.delayTimer = self.delayTimer - 1
     end
 
     -- Ejecutar ciclos de CPU (puedes ajustar la cantidad para velocidad adecuada)
