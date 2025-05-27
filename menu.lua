@@ -33,7 +33,11 @@ end
 function menu:draw()
     love.graphics.clear(0, 0, 0) -- Fondo
     love.graphics.setColor(1, 1, 1)
-    love.graphics.printf("Selecciona una ROM y presiona Enter", 0, 10, love.graphics.getWidth(), "center")
+    if self.dir == 1 then
+        love.graphics.printf("Juegos: Selecciona una ROM y presiona Enter", 0, 10, love.graphics.getWidth(), "center")
+    else
+        love.graphics.printf("Tests: Selecciona una ROM y presiona Enter", 0, 10, love.graphics.getWidth(), "center")
+    end
 
     local startIndex = self.scrollOffset + 1
     local endIndex = math.min(#self.roms[self.dir], self.scrollOffset + self.visibleRows)
