@@ -5,8 +5,13 @@ local chip8 = {
     registers = {},
     tickRate = 1 / 60,
     stack = {},
-    mode = "chip8", -- Modo de emulación
+    mode = 0, -- Modo de emulación chip8 por defecto
     debug = false,
+    modes = {
+        chip8 = 0,
+        superChip = 1,
+        megaChip = 2
+    },
     keymap = {
         ["1"] = 0x1,
         ["2"] = 0x2,
@@ -43,6 +48,7 @@ function chip8:onLoad()
 end
 
 function chip8:reset()
+    self.mode = self.modes.chip8
     -- Resetear memoria
     for i = 0, 0xFFF do
         self.memory[i] = 0
@@ -86,8 +92,63 @@ function chip8:reset()
         0xF0, 0x80, 0xF0, 0x80, 0xF0, -- E
         0xF0, 0x80, 0xF0, 0x80, 0x80  -- F
     }
+
     for i = 0, #fontset - 1 do
         self.memory[0x050 + i] = fontset[i + 1]
+    end
+    -- Fontset extendido (SCHIP/SuperCHIP) - caracteres 0-F, 8x10
+    local fontset_extended = {
+        -- 0
+        0xF0, 0x90, 0x90, 0x90, 0xF0,
+        0x90, 0x90, 0x90, 0x90, 0xF0,
+        -- 1
+        0x20, 0x60, 0x20, 0x20, 0x20,
+        0x20, 0x20, 0x20, 0x20, 0x70,
+        -- 2
+        0xF0, 0x10, 0x10, 0x10, 0xF0,
+        0x80, 0x80, 0x80, 0x80, 0xF0,
+        -- 3
+        0xF0, 0x10, 0x10, 0x10, 0xF0,
+        0x10, 0x10, 0x10, 0x10, 0xF0,
+        -- 4
+        0x90, 0x90, 0x90, 0x90, 0xF0,
+        0x10, 0x10, 0x10, 0x10, 0x10,
+        -- 5
+        0xF0, 0x80, 0x80, 0x80, 0xF0,
+        0x10, 0x10, 0x10, 0x10, 0xF0,
+        -- 6
+        0xF0, 0x80, 0x80, 0x80, 0xF0,
+        0x90, 0x90, 0x90, 0x90, 0xF0,
+        -- 7
+        0xF0, 0x10, 0x10, 0x10, 0x10,
+        0x10, 0x10, 0x10, 0x10, 0x10,
+        -- 8
+        0xF0, 0x90, 0x90, 0x90, 0xF0,
+        0x90, 0x90, 0x90, 0x90, 0xF0,
+        -- 9
+        0xF0, 0x90, 0x90, 0x90, 0xF0,
+        0x10, 0x10, 0x10, 0x10, 0xF0,
+        -- A
+        0xF0, 0x90, 0x90, 0x90, 0xF0,
+        0x90, 0x90, 0x90, 0x90, 0x90,
+        -- B
+        0xE0, 0x90, 0x90, 0x90, 0xE0,
+        0x90, 0x90, 0x90, 0x90, 0xE0,
+        -- C
+        0xF0, 0x80, 0x80, 0x80, 0x80,
+        0x80, 0x80, 0x80, 0x80, 0xF0,
+        -- D
+        0xE0, 0x90, 0x90, 0x90, 0x90,
+        0x90, 0x90, 0x90, 0x90, 0xE0,
+        -- E
+        0xF0, 0x80, 0x80, 0x80, 0xF0,
+        0x80, 0x80, 0x80, 0x80, 0xF0,
+        -- F
+        0xF0, 0x80, 0x80, 0x80, 0xF0,
+        0x80, 0x80, 0x80, 0x80, 0x80,
+    }
+    for i = 0, #fontset_extended - 1 do
+        self.memory[0x100 + i] = fontset_extended[i + 1]
     end
 end
 
@@ -140,8 +201,16 @@ function chip8:update(dt)
     end
 
     -- Ejecutar ciclos de CPU (puedes ajustar la cantidad para velocidad adecuada)
-    for _ = 1, 10 do
-        self:tick()
+    if self.mode == self.modes.chip8 then
+        -- Chip-8 tiene un ciclo de CPU más lento, por lo que ejecutamos menos ciclos
+        for _ = 1, 10 do
+            self:tick()
+        end
+    elseif self.mode == self.modes.superChip then
+        -- SuperChip puede ejecutar más ciclos por tick
+        for _ = 1, 20 do
+            self:tick()
+        end
     end
 end
 
@@ -152,11 +221,20 @@ function chip8:draw()
 
     love.graphics.setColor(color.color)
 
-    for y = 0, 31 do
-        for x = 0, 63 do
-            local pixel = self.display[y * 64 + x]
-            if pixel == 1 then
-                love.graphics.rectangle("fill", x * 8, y * 8, 7, 7)
+    if self.mode == self.modes.chip8 then
+        for y = 0, 31 do
+            for x = 0, 63 do
+                if self.display[y * 64 + x] == 1 then
+                    love.graphics.rectangle("fill", x * 8, y * 8, 7, 7)
+                end
+            end
+        end
+    elseif self.mode == self.modes.superChip then
+        for y = 0, 63 do
+            for x = 0, 127 do
+                if self.display[y * 128 + x] == 1 then
+                    love.graphics.rectangle("fill", x * 4, y * 4, 3, 3)
+                end
             end
         end
     end
@@ -220,7 +298,24 @@ function chip8:tick()
 end
 
 function chip8:executeOpcode(opcode)
-    if opcode == 0x00E0 then -- CLS
+    if opcode > 0x00C0 and opcode < 0x00CF and self.mode == self.modes.superChip then
+        -- Scroll display N lines down
+        local n = Bit.band(opcode, 0x000F)
+        if n > 0 then
+            for i = 1, n do
+                -- Desplazar la pantalla hacia abajo
+                for y = 63, 1, -1 do
+                    for x = 0, 63 do
+                        self.display[y * 64 + x] = self.display[(y - 1) * 64 + x]
+                    end
+                end
+                -- Limpiar la primera línea
+                for x = 0, 63 do
+                    self.display[x] = 0
+                end
+            end
+        end
+    elseif opcode == 0x00E0 then -- CLS
         --  Clear the display.
         for i = 1, #self.display do
             self.display[i] = 0
@@ -229,6 +324,33 @@ function chip8:executeOpcode(opcode)
         --  Return from a subroutine.
         self.sp = self.sp - 1
         self.pc = self.stack[self.sp]
+    elseif opcode == 0x00FB and self.mode == self.modes.superChip then
+        -- Scroll display right by 4 pixels
+        for y = 0, 31 do
+            for x = 63, 4, -1 do
+                self.display[y * 64 + x] = self.display[y * 64 + (x - 4)]
+            end
+            for x = 0, 3 do
+                self.display[y * 64 + x] = 0
+            end
+        end
+    elseif opcode == 0x00FC and self.mode == self.modes.superChip then
+        -- Scroll display left by 4 pixels
+        for y = 0, 31 do
+            for x = 0, 59 do
+                self.display[y * 64 + x] = self.display[y * 64 + (x + 4)]
+            end
+            for x = 60, 63 do
+                self.display[y * 64 + x] = 0
+            end
+        end
+    elseif opcode == 0x00FD and self.mode == self.modes.superChip then
+        -- Exit the emulator
+        self:setScene("menu")
+    elseif opcode == 0x00FF then
+        self.mode = self.modes.superChip
+    elseif opcode == 0x00FE then
+        self.mode = self.modes.chip8
     elseif opcode >= 0x1000 and opcode < 0x2000 then -- 1NNN
         --  Jump to location nnn.
         local address = Bit.band(opcode, 0x0FFF)
@@ -344,24 +466,83 @@ function chip8:executeOpcode(opcode)
         local nn = Bit.band(opcode, 0x00FF)
         self.registers[x] = Bit.band(math.random(0, 255), nn)
     elseif opcode >= 0xD000 and opcode < 0xE000 then -- DXYN
-        -- Draw sprite at coordinate (Vx, Vy) with N bytes of sprite data
-        local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
-        local y = Bit.band(Bit.rshift(opcode, 4), 0x0F)
-        local n = Bit.band(opcode, 0x000F)
-        self.registers[0xF] = 0 -- Clear VF before drawing
-        for i = 0, n - 1 do
-            local byte = self.memory[self.I + i]
-            for j = 0, 7 do
-                local pixel = Bit.band(byte, Bit.lshift(1, 7 - j))
-                if pixel ~= 0 then
-                    local px = (self.registers[x] + j) % 64
-                    local py = (self.registers[y] + i) % 32
-                    if self.display[py * 64 + px] == 1 then
-                        self.registers[0xF] = 1 -- Collision detected
+        if self.mode == self.modes.chip8 then
+            -- Draw sprite at coordinate (Vx, Vy) with N bytes of sprite data
+            local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
+            local y = Bit.band(Bit.rshift(opcode, 4), 0x0F)
+            local n = Bit.band(opcode, 0x000F)
+            self.registers[0xF] = 0 -- Clear VF before drawing
+            for i = 0, n - 1 do
+                local byte = self.memory[self.I + i]
+                for j = 0, 7 do
+                    local pixel = Bit.band(byte, Bit.lshift(1, 7 - j))
+                    if pixel ~= 0 then
+                        local px = (self.registers[x] + j) % 64
+                        local py = (self.registers[y] + i) % 32
+                        if self.display[py * 64 + px] == 1 then
+                            self.registers[0xF] = 1 -- Collision detected
+                        end
+                        self.display[py * 64 + px] = Bit.bxor(self.display[py * 64 + px], 1)
                     end
-                    self.display[py * 64 + px] = Bit.bxor(self.display[py * 64 + px], 1)
                 end
             end
+        elseif self.mode == self.modes.superChip then
+            -- DXYN: SuperChip soporta sprites de 8xN (N=0: 16x16)
+            local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
+            local y = Bit.band(Bit.rshift(opcode, 4), 0x0F)
+            local n = Bit.band(opcode, 0x000F)
+            self.registers[0xF] = 0 -- Clear VF before drawing
+
+            if n == 0 then
+                -- DXY0: Dibuja sprite 16x16 (32 bytes)
+                for i = 0, 15 do
+                    local leftByte  = self.memory[self.I + i * 2]
+                    local rightByte = self.memory[self.I + i * 2 + 1]
+                    for j = 0, 7 do
+                        -- Izquierda (bits 0-7)
+                        local pixel = Bit.band(leftByte, Bit.lshift(1, 7 - j))
+                        if pixel ~= 0 then
+                            local px = (self.registers[x] + j) % 128
+                            local py = (self.registers[y] + i) % 64
+                            local idx = py * 128 + px
+                            if self.display[idx] == 1 then
+                                self.registers[0xF] = 1
+                            end
+                            self.display[idx] = Bit.bxor(self.display[idx] or 0, 1)
+                        end
+                        -- Derecha (bits 8-15)
+                        local pixel2 = Bit.band(rightByte, Bit.lshift(1, 7 - j))
+                        if pixel2 ~= 0 then
+                            local px = (self.registers[x] + 8 + j) % 128
+                            local py = (self.registers[y] + i) % 64
+                            local idx = py * 128 + px
+                            if self.display[idx] == 1 then
+                                self.registers[0xF] = 1
+                            end
+                            self.display[idx] = Bit.bxor(self.display[idx] or 0, 1)
+                        end
+                    end
+                end
+            else
+                -- DXYN: Dibuja sprite 8xN (igual que Chip8 pero en pantalla 128x64)
+                for i = 0, n - 1 do
+                    local byte = self.memory[self.I + i]
+                    for j = 0, 7 do
+                        local pixel = Bit.band(byte, Bit.lshift(1, 7 - j))
+                        if pixel ~= 0 then
+                            local px = (self.registers[x] + j) % 128
+                            local py = (self.registers[y] + i) % 64
+                            local idx = py * 128 + px
+                            if self.display[idx] == 1 then
+                                self.registers[0xF] = 1
+                            end
+                            self.display[idx] = Bit.bxor(self.display[idx] or 0, 1)
+                        end
+                    end
+                end
+            end
+        else
+            print("Unknown opcode: " .. string.format("0x%04X", opcode))
         end
     elseif opcode >= 0xE000 and opcode < 0xF000 then -- EXXX
         local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
@@ -409,7 +590,19 @@ function chip8:executeOpcode(opcode)
             if value > 0xF then
                 print("Unknown opcode: " .. string.format("0x%04X", opcode))
             else
-                self.I = value * 5 -- Assuming font data starts at 0x50
+                -- Fuente clásica: cada carácter ocupa 5 bytes, empieza en 0x50
+                self.I = 0x50 + (value * 5)
+            end
+        elseif Bit.band(opcode, 0x00FF) == 0x0030 and self.mode == self.modes.superChip then
+            -- Set I to the location of the sprite for digit Vx
+            local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
+            local value = self.registers[x]
+
+            if value > 0xF then
+                print("Unknown opcode: " .. string.format("0x%04X", opcode))
+            else
+                -- Fuente extendida: cada carácter ocupa 10 bytes, empieza en 0x100
+                self.I = 0x100 + (value * 10)
             end
         elseif Bit.band(opcode, 0x00FF) == 0x0033 then
             -- FX33: Store BCD representation of Vx in memory at I, I+1, and I+2
@@ -426,6 +619,18 @@ function chip8:executeOpcode(opcode)
             end
         elseif Bit.band(opcode, 0x00FF) == 0x0065 then
             -- Read registers V0 to Vx from memory starting at location I
+            local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
+            for i = 0, x do
+                self.registers[i] = self.memory[self.I + i]
+            end
+        elseif Bit.band(opcode, 0x00FF) == 0x0075 and self.mode == self.modes.superChip then
+            -- Store registers V0 to Vx in memory starting at location I (SuperChip)
+            local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
+            for i = 0, x do
+                self.memory[self.I + i] = self.registers[i]
+            end
+        elseif Bit.band(opcode, 0x00FF) == 0x0085 and self.mode == self.modes.superChip then
+            -- Read registers V0 to Vx from memory starting at location I (SuperChip)
             local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
             for i = 0, x do
                 self.registers[i] = self.memory[self.I + i]
