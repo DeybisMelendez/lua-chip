@@ -2,17 +2,10 @@ local chip8 = {
     memory = {},
     display = {},
     keypad = {},
-    registers = { 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0 },
+    registers = {},
+    tickRate = 1 / 60,
     stack = {},
-    delayTimer = 0,
-    soundTimer = 0,
-    pc = 0x200,            -- Program counter starts at 0x200
-    sp = 0,                -- Stack pointer
-    I = 0,                 -- Index register
-    waitingForKey = false, -- Flag to indicate if waiting for a key press
-    waitingRegister = nil, -- Register to store the key pressed
-    mode = "chip8",        -- Modo de emulación
+    mode = "chip8", -- Modo de emulación
     debug = false,
     keymap = {
         ["1"] = 0x1,
@@ -75,6 +68,27 @@ function chip8:reset()
     self.waitingRegister = nil
     self.beepSource = self:createBeepSound()
     for i = 0, 15 do self.keypad[i] = 0 end
+    local fontset = {
+        0xF0, 0x90, 0x90, 0x90, 0xF0, -- 0
+        0x20, 0x60, 0x20, 0x20, 0x70, -- 1
+        0xF0, 0x10, 0xF0, 0x80, 0xF0, -- 2
+        0xF0, 0x10, 0xF0, 0x10, 0xF0, -- 3
+        0x90, 0x90, 0xF0, 0x10, 0x10, -- 4
+        0xF0, 0x80, 0xF0, 0x10, 0xF0, -- 5
+        0xF0, 0x80, 0xF0, 0x90, 0xF0, -- 6
+        0xF0, 0x10, 0x20, 0x40, 0x40, -- 7
+        0xF0, 0x90, 0xF0, 0x90, 0xF0, -- 8
+        0xF0, 0x90, 0xF0, 0x10, 0xF0, -- 9
+        0xF0, 0x90, 0xF0, 0x90, 0x90, -- A
+        0xE0, 0x90, 0xE0, 0x90, 0xE0, -- B
+        0xF0, 0x80, 0x80, 0x80, 0xF0, -- C
+        0xE0, 0x90, 0x90, 0x90, 0xE0, -- D
+        0xF0, 0x80, 0xF0, 0x80, 0xF0, -- E
+        0xF0, 0x80, 0xF0, 0x80, 0x80  -- F
+    }
+    for i = 0, #fontset - 1 do
+        self.memory[0x050 + i] = fontset[i + 1]
+    end
 end
 
 function chip8:loadGame()
@@ -112,7 +126,7 @@ function chip8:update(dt)
     -- Acumular tiempo para manejar temporizadores a 60 Hz
     self.timerAccumulator = (self.timerAccumulator or 0) + dt
 
-    while self.timerAccumulator >= 1 / 60 do
+    while self.timerAccumulator >= self.tickRate do
         if self.delayTimer > 0 then
             self.delayTimer = self.delayTimer - 1
         end
@@ -122,7 +136,7 @@ function chip8:update(dt)
                 self.beepSource:play()
             end
         end
-        self.timerAccumulator = self.timerAccumulator - 1 / 60
+        self.timerAccumulator = self.timerAccumulator - self.tickRate
     end
 
     -- Ejecutar ciclos de CPU (puedes ajustar la cantidad para velocidad adecuada)
@@ -133,14 +147,16 @@ end
 
 function chip8:draw()
     local color = self.colors[self.currentColor]
-    love.graphics.clear(color.bg)
+
+    love.graphics.setBackgroundColor(color.bg)
+
     love.graphics.setColor(color.color)
 
     for y = 0, 31 do
         for x = 0, 63 do
             local pixel = self.display[y * 64 + x]
             if pixel == 1 then
-                love.graphics.rectangle("fill", x * 8, y * 8, 8, 8)
+                love.graphics.rectangle("fill", x * 8, y * 8, 7, 7)
             end
         end
     end
