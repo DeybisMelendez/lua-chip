@@ -12,6 +12,12 @@ local chip8 = {
         superChip = 1,
         megaChip = 2
     },
+    quirks = {
+        -- Chip 8 quirks
+        shifting = false,
+        vfReset = true,
+        jumping = true,
+    },
     keymap = {
         ["1"] = 0x1,
         ["2"] = 0x2,
@@ -404,16 +410,25 @@ function chip8:executeOpcode(opcode)
             local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
             local y = Bit.band(Bit.rshift(opcode, 4), 0x0F)
             self.registers[x] = Bit.bor(self.registers[x], self.registers[y])
+            if self.quirks.vfReset then
+                self.registers[0xF] = 0 -- Reset VF
+            end
         elseif Bit.band(opcode, 0x000F) == 2 then
             -- Set Vx = Vx AND Vy
             local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
             local y = Bit.band(Bit.rshift(opcode, 4), 0x0F)
             self.registers[x] = Bit.band(self.registers[x], self.registers[y])
+            if self.quirks.vfReset then
+                self.registers[0xF] = 0 -- Reset VF
+            end
         elseif Bit.band(opcode, 0x000F) == 3 then
             -- Set Vx = Vx XOR Vy
             local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
             local y = Bit.band(Bit.rshift(opcode, 4), 0x0F)
             self.registers[x] = Bit.bxor(self.registers[x], self.registers[y])
+            if self.quirks.vfReset then
+                self.registers[0xF] = 0 -- Reset VF
+            end
         elseif Bit.band(opcode, 0x000F) == 4 then
             -- Set Vx = Vx + Vy, set VF = carry
             local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
@@ -436,12 +451,12 @@ function chip8:executeOpcode(opcode)
             -- Set VF = least significant bit of Vx, then Vx = Vx >> 1 or Vx = Vy >> 1
             local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
             local y = Bit.band(Bit.rshift(opcode, 4), 0x0F)
-            if Quirks.shiftQuirk then
-                local value = self.registers[y]
+            if self.quirks.shifting then
+                local value = self.registers[x]
                 self.registers[x] = Bit.rshift(value, 1)
                 self.registers[0xF] = Bit.band(value, 0x01)
             else
-                local value = self.registers[x]
+                local value = self.registers[y]
                 self.registers[x] = Bit.rshift(value, 1)
                 self.registers[0xF] = Bit.band(value, 0x01)
             end
@@ -459,13 +474,13 @@ function chip8:executeOpcode(opcode)
         elseif Bit.band(opcode, 0x000F) == 0xE then
             -- Set VF = most significant bit of Vx, then Vx = Vx << 1
             local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
-            if Quirks.shiftQuirk then
-                local y = Bit.band(Bit.rshift(opcode, 4), 0x0F)
-                local value = self.registers[y]
+            if self.quirks.shifting then
+                local value = self.registers[x]
                 self.registers[x] = Bit.band(Bit.lshift(value, 1), 0xFF)
                 self.registers[0xF] = Bit.band(Bit.rshift(value, 7), 0x1)
             else
-                local value = self.registers[x]
+                local y = Bit.band(Bit.rshift(opcode, 4), 0x0F)
+                local value = self.registers[y]
                 self.registers[x] = Bit.band(Bit.lshift(value, 1), 0xFF)
                 self.registers[0xF] = Bit.band(Bit.rshift(value, 7), 0x1)
             end
@@ -484,9 +499,16 @@ function chip8:executeOpcode(opcode)
         local nnn = Bit.band(opcode, 0x0FFF)
         self.I = nnn
     elseif opcode >= 0xB000 and opcode < 0xC000 then -- BNNN
-        -- Jump to location nnn + V0
-        local nnn = Bit.band(opcode, 0x0FFF)
-        self.pc = self.registers[0] + nnn
+        if self.quirks.jumping then
+            -- BXNN (SuperCHIP quirk): Jump to location nnn + Vx
+            local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
+            local nnn = Bit.band(opcode, 0x0FFF)
+            self.pc = nnn + self.registers[x]
+        else
+            -- Jump to location nnn + V0
+            local nnn = Bit.band(opcode, 0x0FFF)
+            self.pc = nnn + self.registers[0]
+        end
     elseif opcode >= 0xC000 and opcode < 0xD000 then -- CXNN
         -- Set Vx = random byte AND NN
         local x = Bit.band(Bit.rshift(opcode, 8), 0x0F)
