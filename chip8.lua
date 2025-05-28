@@ -10,15 +10,14 @@ local chip8 = {
     modes = {
         chip8 = 0,
         superChip = 1,
-        megaChip = 2
     },
     quirks = {
         -- Chip 8 quirks
-        vfReset = true,
-        memory = true,
+        vfReset = false,
+        memory = false,
         dispWait = true,
         clipping = true,
-        shifting = false,
+        shifting = true,
         jumping = false
     },
     keymap = {
@@ -365,14 +364,16 @@ function chip8:executeOpcode(opcode)
         self.quirks.clipping = false
         self.quirks.shifting = true
         self.quirks.jumping = true
+        print("Switched to SuperCHIP mode")
     elseif opcode == 0x00FE then
         self.mode = self.modes.chip8
-        self.quirks.vfReset = true
-        self.quirks.memory = true
+        self.quirks.vfReset = false
+        self.quirks.memory = false
         self.quirks.dispWait = true
         self.quirks.clipping = true
-        self.quirks.shifting = false
+        self.quirks.shifting = true
         self.quirks.jumping = false
+        print("Switched to CHIP-8 mode")
     elseif opcode >= 0x1000 and opcode < 0x2000 then -- 1NNN
         --  Jump to location nnn.
         local address = Bit.band(opcode, 0x0FFF)
@@ -563,7 +564,7 @@ function chip8:executeOpcode(opcode)
                         if self.display[idx] == 1 then
                             self.registers[0xF] = 1
                         end
-                        self.display[idx] = Bit.bxor(self.display[idx], 1)
+                        self.display[idx] = Bit.bxor(self.display[idx] or 0, 1)
                         ::continue::
                     end
                 end

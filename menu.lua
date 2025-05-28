@@ -12,8 +12,11 @@ function menu:onLoad()
     self.rowHeight = 30                                                              -- Altura de cada fila
     self.visibleRows = math.floor((love.graphics.getHeight() - 40) / self.rowHeight) -- Ajustar según la altura de la ventana
 
-    menu.roms[1] = self:getROMs("games")                                             -- Cargar los juegos desde el directorio "games"
-    menu.roms[2] = self:getROMs("tests")                                             -- Cargar los tests desde el directorio "tests"
+    menu.roms[1] = self:getROMs("roms/chip8Classic")                                 -- Cargar los juegos desde el directorio "games"
+    menu.roms[2] = self:getROMs("roms/superChipClassic")                             -- Cargar los juegos desde el directorio "superChipClassic"
+    menu.roms[3] = self:getROMs("roms/chip8Modern")                                  -- Cargar los juegos desde el directorio "chip8Modern"
+    menu.roms[4] = self:getROMs("roms/superChipModern")                              -- Cargar los juegos desde el directorio "superChipModern"
+    menu.roms[5] = self:getROMs("roms/tests")                                        -- Cargar los tests desde el directorio "tests"
 end
 
 function menu:getROMs(dir)
@@ -33,11 +36,7 @@ end
 function menu:draw()
     love.graphics.clear(0, 0, 0) -- Fondo
     love.graphics.setColor(1, 1, 1)
-    if self.dir == 1 then
-        love.graphics.printf("Juegos: Selecciona una ROM y presiona Enter", 0, 10, love.graphics.getWidth(), "center")
-    else
-        love.graphics.printf("Tests: Selecciona una ROM y presiona Enter", 0, 10, love.graphics.getWidth(), "center")
-    end
+    love.graphics.printf("Selecciona una ROM y presiona Enter", 0, 10, love.graphics.getWidth(), "center")
 
     local startIndex = self.scrollOffset + 1
     local endIndex = math.min(#self.roms[self.dir], self.scrollOffset + self.visibleRows)
@@ -72,9 +71,12 @@ function menu:keypressed(key)
         self:setScene("chip8")
         return
     elseif key == "tab" then
-        self.dir = self.dir == 1 and 2 or 1 -- Cambiar entre juegos y tests
-        self.selected = 1                   -- Reiniciar selección al cambiar de directorio
-        self.scrollOffset = 0               -- Reiniciar scrollOffset al cambiar de directorio
+        self.dir = self.dir + 1
+        if self.dir > #self.roms then
+            self.dir = 1      -- Volver al primer directorio
+        end
+        self.selected = 1     -- Reiniciar selección al cambiar de directorio
+        self.scrollOffset = 0 -- Reiniciar scrollOffset al cambiar de directorio
     end
 
     -- Ajustar scrollOffset para que la opción seleccionada esté visible
