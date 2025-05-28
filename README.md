@@ -70,7 +70,8 @@ lua-chip/
 ## Créditos
 
 - Desarrollado por Deybis Melendez
-- Basado en documentación de [CHIP-8](https://en.wikipedia.org/wiki/CHIP-8) y [SuperChip](https://github.com/Chromatophore/SCHIP-8-Technical-Reference)
+- Basado en documentación de [CHIP-8](https://en.wikipedia.org/wiki/CHIP-8) y SuperChip
+- Depuración con [Chip 8 Test Suite](https://github.com/Timendus/chip8-test-suite)
 - Usa [LÖVE2D](https://love2d.org/) y [LuaBitOp](https://bitop.luajit.org/)
 
 ---
@@ -78,5 +79,9 @@ lua-chip/
 ¡Disfruta ejecutando y probando juegos clásicos y modernos de CHIP-8 y SuperChip en tu propio emulador!
 
 ---
+
+## Screenshots
+
+
 
 **Licencia:** MIT
