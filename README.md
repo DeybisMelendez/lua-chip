@@ -82,6 +82,10 @@ lua-chip/
 
 ## Screenshots
 
-
+![screenshot 1](https://raw.githubusercontent.com/DeybisMelendez/lua-chip/refs/heads/main/screenshots/1.png)
+![screenshot 2](https://raw.githubusercontent.com/DeybisMelendez/lua-chip/refs/heads/main/screenshots/2.png)
+![screenshot 3](https://raw.githubusercontent.com/DeybisMelendez/lua-chip/refs/heads/main/screenshots/3.png)
+![screenshot 4](https://raw.githubusercontent.com/DeybisMelendez/lua-chip/refs/heads/main/screenshots/4.png)
+![screenshot 5](https://raw.githubusercontent.com/DeybisMelendez/lua-chip/refs/heads/main/screenshots/5.png)
 
 **Licencia:** MIT
